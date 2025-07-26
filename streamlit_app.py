@@ -3,6 +3,7 @@ import tempfile
 import os
 from diagnose_audio import diagnose_audio
 
+
 st.set_page_config(page_title="Audio Diagnostic Tool", page_icon="🎧", layout="centered")
 
 st.image("logo.png", width=150)
@@ -25,7 +26,12 @@ if uploaded_file is not None:
             result = diagnose_audio(tmp_path)
             st.success("Analysis complete!")
             st.subheader("📊 Results")
-            st.json(result)
+            
+            import pandas as pd
+            df = pd.DataFrame(result.items(), columns=["Metric", "Value"])
+            st.table(df)
+
+        
         except Exception as e:
             st.error(f"Error analyzing audio: {e}")
         finally:
