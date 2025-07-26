@@ -1,3 +1,6 @@
+st.image("logo.png", width=150)
+st.title("🔎 Audio Diagnostic Tool")
+st.caption("Built to help you inspect audio quality in seconds.")
 import streamlit as st
 import tempfile
 import os
