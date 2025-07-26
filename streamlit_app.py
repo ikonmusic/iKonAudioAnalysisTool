@@ -50,7 +50,7 @@ if uploaded_file is not None:
                     if val < 10:
                         return 'background-color: #fde2e2'
                     elif val > 300:
-                        return 'background-color: #fff4cc'
+                        return 'background-color: #FF0000'
                     else:
                         return 'background-color: #e2f7e2'
                 if label == "Clipping (%)" and isinstance(val, (int, float)) and val > 0:
