@@ -12,7 +12,7 @@ st.set_page_config(page_title="Audio Diagnostic Tool", page_icon="🎧", layout=
 # Header and branding
 st.image("logo.png", width=150)
 st.title("🔊 Audio Diagnostic Tool")
-st.caption("Upload an audio file to analyze its duration, volume, pitch, silence, and frequency balance.")
+st.caption("Upload an audio file to analyze its duration, volume, pitch, silence, clipping, and frequency balance.")
 
 st.markdown("---")
 
@@ -33,7 +33,7 @@ if uploaded_file is not None:
             st.success("✅ Analysis complete!")
             st.subheader("📊 Diagnostic Results")
 
-            # Color-coded table
+            # Color-coded metric table
             def highlight(val, label):
                 if label == "Average Volume (RMS)":
                     if val < 0.01:
@@ -42,14 +42,22 @@ if uploaded_file is not None:
                         return 'background-color: #fff4cc'  # maybe clipping
                     else:
                         return 'background-color: #e2f7e2'  # good
+                if label == "Clipping (%)":
+                    if val > 0.5:
+                        return 'background-color: #ffcccc'
+                if label == "Silence (%)":
+                    if val > 70:
+                        return 'background-color: #fff4cc'
                 if label == "Average Pitch (Hz)":
                     if np.isnan(val) or val < 50:
                         return 'background-color: #fde2e2'  # pitch too low or missing
                 return ''
 
             df = pd.DataFrame(result.items(), columns=["Metric", "Value"])
-            styled_df = df.style.applymap(
-                lambda val: highlight(val, df.loc[df["Value"] == val, "Metric"].values[0])
+
+            styled_df = df.style.apply(
+                lambda row: [highlight(row["Value"], row["Metric"]), ""],
+                axis=1
             )
             st.dataframe(styled_df, use_container_width=True)
 
@@ -64,6 +72,12 @@ if uploaded_file is not None:
             ax.set_ylabel("Energy")
             ax.set_title("Frequency Balance")
             st.pyplot(fig)
+
+            # Waveform preview
+            waveform_path = result.get("Waveform Path")
+            if waveform_path and os.path.exists(waveform_path):
+                st.subheader("📈 Waveform Preview")
+                st.image(waveform_path, use_column_width=True)
 
         except Exception as e:
             st.error(f"❌ Error analyzing audio: {e}")

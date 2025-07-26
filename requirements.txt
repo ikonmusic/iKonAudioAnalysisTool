@@ -1,5 +1,6 @@
 streamlit
 librosa
-numpy
-soundfile
 matplotlib
+soundfile
+pandas
+numpy
