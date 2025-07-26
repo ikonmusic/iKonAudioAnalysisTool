@@ -54,7 +54,7 @@ if uploaded_file is not None:
                     else:
                         return 'background-color: #e2f7e2'
                 if label == "Clipping (%)" and isinstance(val, (int, float)) and val > 0:
-                    return 'background-color: #ffcccc'
+                    return 'background-color: #FF0000'
                 return ''
 
             df = pd.DataFrame(display_data.items(), columns=["Metric", "Value"])
