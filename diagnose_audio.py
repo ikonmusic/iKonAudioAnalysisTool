@@ -3,27 +3,31 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import librosa.display
+import soundfile as sf
 
 def diagnose_audio(file_path):
-    # Load audio file
+    # Load audio and metadata
     y, sr = librosa.load(file_path, sr=None)
+    info = sf.info(file_path)
 
     if y.size == 0:
         raise ValueError("Audio file is empty or unreadable.")
 
     duration = librosa.get_duration(y=y, sr=sr)
 
+    # Bit depth estimation (approx)
+    subtype = info.subtype
+    bit_depth = "".join(filter(str.isdigit, subtype)) or "Unknown"
+
     # Volume (RMS)
     rms_vals = librosa.feature.rms(y=y)
-    if rms_vals is None or rms_vals.size == 0:
-        rms = 0.0
-        silence_pct = 100.0
-    else:
-        rms = float(np.mean(rms_vals))
-        rms_flat = rms_vals.flatten()
-        silence_thresh = 0.02
-        silence_frames = np.sum(rms_flat < silence_thresh)
-        silence_pct = (silence_frames / len(rms_flat)) * 100
+    rms = float(np.mean(rms_vals)) if rms_vals.size > 0 else 0.0
+
+    # Silence percentage
+    silence_thresh = 0.02
+    rms_flat = rms_vals.flatten()
+    silence_frames = np.sum(rms_flat < silence_thresh)
+    silence_pct = (silence_frames / len(rms_flat)) * 100 if len(rms_flat) > 0 else 100.0
 
     # Clipping detection
     clip_thresh = 0.98
@@ -34,10 +38,10 @@ def diagnose_audio(file_path):
     try:
         pitch = librosa.yin(y, fmin=50, fmax=300)
         avg_pitch = float(np.mean(pitch)) if pitch.size > 0 else float("nan")
-    except:
+    except Exception:
         avg_pitch = float("nan")
 
-    # Frequency energy bands (EQ snapshot)
+    # Frequency band energy
     stft = np.abs(librosa.stft(y))
     freqs = librosa.fft_frequencies(sr=sr)
 
@@ -49,8 +53,10 @@ def diagnose_audio(file_path):
     mid_energy = band_energy(250, 4000)
     high_energy = band_energy(4000, 16000)
 
-    # Generate waveform preview
-    waveform_path = os.path.splitext(file_path)[0] + "_waveform.png"
+    base = os.path.splitext(file_path)[0]
+
+    # Waveform image
+    waveform_path = base + "_waveform.png"
     plt.figure(figsize=(10, 3))
     librosa.display.waveshow(y, sr=sr, alpha=0.7)
     plt.title("Waveform Preview")
@@ -60,8 +66,28 @@ def diagnose_audio(file_path):
     plt.savefig(waveform_path)
     plt.close()
 
+    # Spectrogram image
+    spectrogram_path = base + "_spectrogram.png"
+    D = librosa.amplitude_to_db(librosa.stft(y), ref=np.max)
+    plt.figure(figsize=(10, 4))
+    librosa.display.specshow(D, sr=sr, x_axis='time', y_axis='log', cmap='magma')
+    plt.colorbar(format='%+2.0f dB')
+    plt.title("Spectrogram (Log Scale)")
+    plt.tight_layout()
+    plt.savefig(spectrogram_path)
+    plt.close()
+
+    # Interactive waveform data
+    times = np.linspace(0, duration, num=len(y))
+    waveform_data = {
+        "times": times.tolist(),
+        "amplitudes": y.tolist()
+    }
+
     return {
         "Duration (sec)": round(duration, 2),
+        "Sample Rate (Hz)": sr,
+        "Bit Depth": bit_depth,
         "Average Volume (RMS)": round(rms, 6),
         "Average Pitch (Hz)": round(avg_pitch, 2),
         "Silence (%)": round(silence_pct, 1),
@@ -69,5 +95,7 @@ def diagnose_audio(file_path):
         "Low Freq Energy": round(low_energy, 3),
         "Mid Freq Energy": round(mid_energy, 3),
         "High Freq Energy": round(high_energy, 3),
-        "Waveform Path": waveform_path
+        "Waveform Path": waveform_path,
+        "Spectrogram Path": spectrogram_path,
+        "Waveform Data": waveform_data
     }
