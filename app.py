@@ -4,7 +4,6 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import plotly.graph_objs as go
 from diagnose_audio import diagnose_audio
 
 st.set_page_config(page_title="Audio Diagnostic Tool", page_icon="🎧", layout="centered")
@@ -32,67 +31,62 @@ if uploaded_file is not None:
             st.success("✅ Analysis complete!")
             st.subheader("📊 Diagnostic Results")
 
-            # Color-coded metric table
+            # Format duration to mm:ss
+            total_seconds = int(result["Duration (sec)"])
+            minutes = total_seconds // 60
+            seconds = total_seconds % 60
+            duration_str = f"{minutes}:{seconds:02d}"
+
+            # Update results with formatted values
+            display_data = {
+                "Duration": duration_str,
+                "Sample Rate (Hz)": result["Sample Rate (Hz)"],
+                "Bit Depth": result["Bit Depth"],
+                "Average Volume (RMS)": round(result["Average Volume (RMS)"] * 1000),  # scaled for clarity
+                "Average Pitch (Hz)": int(round(result["Average Pitch (Hz)"])) if not np.isnan(result["Average Pitch (Hz)"]) else "N/A",
+                "Silence (%)": int(round(result["Silence (%)"])),
+                "Clipping (%)": int(round(result["Clipping (%)"]))
+            }
+
             def highlight(val, label):
                 if label == "Average Volume (RMS)":
-                    if val < 0.01:
+                    if val < 10:
                         return 'background-color: #fde2e2'
-                    elif val > 0.3:
+                    elif val > 300:
                         return 'background-color: #fff4cc'
                     else:
                         return 'background-color: #e2f7e2'
-                if label == "Clipping (%)" and val > 0.5:
+                if label == "Clipping (%)" and isinstance(val, (int, float)) and val > 0:
                     return 'background-color: #ffcccc'
-                if label == "Silence (%)" and val > 70:
-                    return 'background-color: #fff4cc'
-                if label == "Average Pitch (Hz)" and (np.isnan(val) or val < 50):
-                    return 'background-color: #fde2e2'
                 return ''
 
-            # Show diagnostic values
-            display_keys = [
-                "Duration (sec)", "Sample Rate (Hz)", "Bit Depth", "Average Volume (RMS)",
-                "Average Pitch (Hz)", "Silence (%)", "Clipping (%)"
-            ]
-            df = pd.DataFrame([[k, result[k]] for k in display_keys], columns=["Metric", "Value"])
+            df = pd.DataFrame(display_data.items(), columns=["Metric", "Value"])
             styled_df = df.style.apply(
                 lambda row: [highlight(row["Value"], row["Metric"]), ""],
                 axis=1
             )
             st.dataframe(styled_df, use_container_width=True)
 
-            # Frequency balance bar chart
+            # EQ Balance - Horizontal Bar Chart
             st.subheader("🎚️ Frequency Balance (EQ Snapshot)")
-            fig_eq, ax_eq = plt.subplots()
-            ax_eq.bar(["Low", "Mid", "High"], 
-                      [result["Low Freq Energy"], result["Mid Freq Energy"], result["High Freq Energy"]],
-                      color=["#7da6ff", "#72d572", "#ffa726"])
-            ax_eq.set_ylabel("Energy")
-            ax_eq.set_title("Frequency Balance")
-            st.pyplot(fig_eq)
+            labels = ["Low", "Mid", "High"]
+            values = [
+                result["Low Freq Energy"],
+                result["Mid Freq Energy"],
+                result["High Freq Energy"]
+            ]
+            fig, ax = plt.subplots(figsize=(6, 3))
+            bars = ax.barh(labels, values, color=["#7da6ff", "#72d572", "#ffa726"])
+            ax.set_xlabel("Energy")
+            ax.set_xlim(left=0)
+            for bar in bars:
+                width = bar.get_width()
+                ax.text(width + 0.01, bar.get_y() + bar.get_height() / 2,
+                        f"{width:.1f}", va='center')
+            ax.set_title("Frequency Balance")
+            st.pyplot(fig)
 
-            # Waveform preview — Interactive
-            st.subheader("📈 Interactive Waveform")
-            wave_data = result.get("Waveform Data")
-            if wave_data:
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=wave_data["times"],
-                    y=wave_data["amplitudes"],
-                    mode="lines",
-                    line=dict(color="RoyalBlue"),
-                    name="Waveform"
-                ))
-                fig.update_layout(
-                    xaxis_title="Time (s)",
-                    yaxis_title="Amplitude",
-                    height=300,
-                    margin=dict(l=20, r=20, t=30, b=20),
-                    showlegend=False
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-            # Static waveform (optional)
+            # Static waveform snapshot
             if os.path.exists(result["Waveform Path"]):
                 st.subheader("🖼️ Waveform Snapshot")
                 st.image(result["Waveform Path"], use_column_width=True)

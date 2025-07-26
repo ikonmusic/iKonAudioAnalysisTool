@@ -4,7 +4,6 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import plotly.graph_objs as go
 from diagnose_audio import diagnose_audio
 
 st.set_page_config(page_title="Audio Diagnostic Tool", page_icon="🎧", layout="centered")
@@ -12,14 +11,13 @@ st.set_page_config(page_title="Audio Diagnostic Tool", page_icon="🎧", layout=
 # Header and branding
 st.image("logo.png", width=150)
 st.title("🔊 Audio Diagnostic Tool")
-st.caption("Upload an audio file to analyze its duration, volume, pitch, silence, clipping, and EQ balance.")
+st.caption("Upload an audio file to analyze duration, volume, pitch, silence, clipping, and EQ balance.")
 
 st.markdown("---")
 
 uploaded_file = st.file_uploader("🎵 Upload your audio file (.wav)", type=["wav"])
 
 if uploaded_file is not None:
-    # Save uploaded file temporarily
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
         tmp.write(uploaded_file.read())
         tmp_path = tmp.name
@@ -32,72 +30,72 @@ if uploaded_file is not None:
             st.success("✅ Analysis complete!")
             st.subheader("📊 Diagnostic Results")
 
-            # Color-coded metric table
+            # Format duration as mm:ss
+            total_seconds = int(result["Duration (sec)"])
+            duration_str = f"{total_seconds // 60}:{total_seconds % 60:02d}"
+
+            # Display metrics
+            display_data = {
+                "Duration": duration_str,
+                "Sample Rate (Hz)": result["Sample Rate (Hz)"],
+                "Bit Depth": result["Bit Depth"],
+                "Average Volume (RMS)": round(result["Average Volume (RMS)"] * 1000),
+                "Average Pitch (Hz)": int(round(result["Average Pitch (Hz)"])) if not np.isnan(result["Average Pitch (Hz)"]) else "N/A",
+                "Silence (%)": int(round(result["Silence (%)"])),
+                "Clipping (%)": int(round(result["Clipping (%)"]))
+            }
+
             def highlight(val, label):
                 if label == "Average Volume (RMS)":
-                    if val < 0.01:
+                    if val < 10:
                         return 'background-color: #fde2e2'
-                    elif val > 0.3:
+                    elif val > 300:
                         return 'background-color: #fff4cc'
                     else:
                         return 'background-color: #e2f7e2'
-                if label == "Clipping (%)" and val > 0.5:
+                if label == "Clipping (%)" and isinstance(val, (int, float)) and val > 0:
                     return 'background-color: #ffcccc'
-                if label == "Silence (%)" and val > 70:
-                    return 'background-color: #fff4cc'
-                if label == "Average Pitch (Hz)" and (np.isnan(val) or val < 50):
-                    return 'background-color: #fde2e2'
                 return ''
 
-            # Show diagnostic values
-            display_keys = [
-                "Duration (sec)", "Sample Rate (Hz)", "Bit Depth", "Average Volume (RMS)",
-                "Average Pitch (Hz)", "Silence (%)", "Clipping (%)"
-            ]
-            df = pd.DataFrame([[k, result[k]] for k in display_keys], columns=["Metric", "Value"])
+            df = pd.DataFrame(display_data.items(), columns=["Metric", "Value"])
             styled_df = df.style.apply(
                 lambda row: [highlight(row["Value"], row["Metric"]), ""],
                 axis=1
             )
             st.dataframe(styled_df, use_container_width=True)
 
-            # Frequency balance bar chart
-            st.subheader("🎚️ Frequency Balance (EQ Snapshot)")
-            fig_eq, ax_eq = plt.subplots()
-            ax_eq.bar(["Low", "Mid", "High"], 
-                      [result["Low Freq Energy"], result["Mid Freq Energy"], result["High Freq Energy"]],
-                      color=["#7da6ff", "#72d572", "#ffa726"])
-            ax_eq.set_ylabel("Energy")
-            ax_eq.set_title("Frequency Balance")
-            st.pyplot(fig_eq)
+            # EQ Balance - Frequency Curve Plot (No energy)
+            st.subheader("🎚️ Frequency Bands (Visual Reference)")
 
-            # Waveform preview — Interactive
-            st.subheader("📈 Interactive Waveform")
-            wave_data = result.get("Waveform Data")
-            if wave_data:
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=wave_data["times"],
-                    y=wave_data["amplitudes"],
-                    mode="lines",
-                    line=dict(color="RoyalBlue"),
-                    name="Waveform"
-                ))
-                fig.update_layout(
-                    xaxis_title="Time (s)",
-                    yaxis_title="Amplitude",
-                    height=300,
-                    margin=dict(l=20, r=20, t=30, b=20),
-                    showlegend=False
-                )
-                st.plotly_chart(fig, use_container_width=True)
+            freqs = np.linspace(20, 16000, 1000)
 
-            # Static waveform (optional)
+            def bell_mask(x, mu, sigma):
+                return np.exp(-(x - mu) ** 2 / (2 * sigma ** 2))
+
+            low_curve = bell_mask(freqs, mu=100, sigma=80)
+            mid_curve = bell_mask(freqs, mu=1000, sigma=700)
+            high_curve = bell_mask(freqs, mu=8000, sigma=3000)
+
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.plot(freqs, low_curve, label="Low Band", color="#7da6ff", linewidth=2)
+            ax.plot(freqs, mid_curve, label="Mid Band", color="#72d572", linewidth=2)
+            ax.plot(freqs, high_curve, label="High Band", color="#ffa726", linewidth=2)
+
+            ax.set_xscale('log')
+            ax.set_xlim(20, 16000)
+            ax.set_xlabel("Frequency (Hz)")
+            ax.set_ylabel("Relative Response")
+            ax.set_title("Frequency Bands Curve")
+            ax.legend()
+            ax.grid(True, which="both", linestyle="--", linewidth=0.3)
+            st.pyplot(fig)
+
+            # Waveform preview
             if os.path.exists(result["Waveform Path"]):
-                st.subheader("🖼️ Waveform Snapshot")
+                st.subheader("🗆️ Waveform Snapshot")
                 st.image(result["Waveform Path"], use_column_width=True)
 
-            # Spectrogram
+            # Spectrogram preview
             if os.path.exists(result["Spectrogram Path"]):
                 st.subheader("🌈 Spectrogram (Log Scale)")
                 st.image(result["Spectrogram Path"], use_column_width=True)
